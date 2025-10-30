@@ -1,3 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mouse & Keyboard Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid white;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 24px;
+        }
+        #health {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 24px;
+        }
+        #level {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 36px;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0</div>
+    <div id="health">Health: 3</div>
+    <div id="level">Level: 1</div>
+    <div id="gameOver">Game Over!<br>Final Score: 0<br>Click to Restart</div>
+    <canvas id="gameCanvas" width="1000" height="700"></canvas>
+
+    <script>
+        console.log("Script loaded. Initializing game...");
+
+        const canvas = document.getElementById('gameCanvas');
+        if (!canvas) {
+            alert("Canvas element not found!");
+            throw new Error("Canvas not found");
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            alert("Canvas context not supported in this browser!");
+            throw new Error("Canvas context not supported");
+        }
+
+        console.log("Canvas initialized successfully.");
+
+        const scoreDiv = document.getElementById('score');
+        const healthDiv = document.getElementById('health');
+        const levelDiv = document.getElementById('level');
+        const gameOverDiv = document.getElementById('gameOver');
+
+        // Colors
+        const BLACK = '#000000';
+        const GRAY = '#808080';
+        const GOLD = '#FFD700';
+        const RED = '#FF0000';
+        const WOOD_LIGHT = '#D2B48C';
+        const WOOD_DARK = '#8B4513';
+
+        // Player settings
+        let playerSize = 50;
+        let playerX = canvas.width / 2;
+        let playerY = canvas.height / 2;
+        let playerSpeed = 5;
+        let health = 3;
+        let level = 1;
+
+        // Coins
+        let coins = [];
+        function generateCoins(num) {
+            coins = [];
+            for (let i = 0; i < num; i++) {
+                coins.push({
+                    x: Math.random() * (canvas.width - 40),
+                    y: Math.random() * (canvas.height - 40),
+                    size: 40
+                });
+            }
+        }
+        generateCoins(10);
+
+        // Obstacles
+        let obstacles = [];
+        function generateObstacles(num) {
+            obstacles = [];
+            for (let i = 0; i < num; i++) {
+                obstacles.push({
+                    x: Math.random() * (canvas.width - 50),
+                    y: Math.random() * (canvas.height - 50),
+                    size: 50
+                });
+            }
+        }
+        generateObstacles(5);
+
+        // Game state
+        let score = 0;
+        let gameRunning = true;
+        let targetX = playerX;
+        let targetY = playerY;
+
+        // Keyboard state
+        let keys = {};
+
+        // Audio context for sounds
+        let audioCtx;
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn("Web Audio not supported");
+        }
+
+        function playSound(frequency, duration) {
+            if (!audioCtx) return;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.frequency.value = frequency;
+            oscillator.type = 'sine';
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            targetX = e.clientX - rect.left;
+            targetY = e.clientY - rect.top;
+        });
+        gameOverDiv.addEventListener('click', restartGame);
+
+        function restartGame() {
+            playerX = canvas.width / 2;
+            playerY = canvas.height / 2;
+            targetX = playerX;
+            targetY = playerY;
+            score = 0;
+            health = 3;
+            level = 1;
+            generateCoins(10);
+            generateObstacles(5);
+            gameRunning = true;
+            gameOverDiv.style.display = 'none';
+            scoreDiv.textContent = 'Score: 0';
+            healthDiv.textContent = 'Health: 3';
+            levelDiv.textContent = 'Level: 1';
+            gameLoop();
+        }
+
+        function lerp(start, end, factor) {
+            return start + (end - start) * factor;
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // Keyboard movement
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) playerX -= playerSpeed;
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) playerX += playerSpeed;
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) playerY -= playerSpeed;
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) playerY += playerSpeed;
+
+            // Smooth move toward mouse target with easing
+            const lerpFactor = 0.1;
+            playerX = lerp(playerX, targetX, lerpFactor);
+            playerY = lerp(playerY, targetY, lerpFactor);
+
+            // Keep player on screen
+            playerX = Math.max(0, Math.min(canvas.width - playerSize, playerX));
+            playerY = Math.max(0, Math.min(canvas.height - playerSize, playerY));
+
+            // Check coin collection
+            coins = coins.filter(coin => {
+                if (playerX < coin.x + coin.size && playerX + playerSize > coin.x &&
+                    playerY < coin.y + coin.size && playerY + playerSize > coin.y) {
+                    score += 10;
+                    scoreDiv.textContent = `Score: ${score}`;
+                    playSound(800, 0.2);
+                    return false;
+                }
+                return true;
+            });
+
+            // Level up if all coins collected
+            if (coins.length === 0) {
+                level++;
+                levelDiv.textContent = `Level: ${level}`;
+                playerSpeed += 0.5;
+                generateCoins(10 + level * 2);
+                generateObstacles(5 + level);
+            }
+
+            // Check obstacle collision
+            for (let obs of obstacles) {
+                if (playerX < obs.x + obs.size && playerX + playerSize > obs.x &&
+                    playerY < obs.y + obs.size && playerY + playerSize > obs.y) {
+                    health--;
+                    healthDiv.textContent = `Health: ${health}`;
+                    playSound(200, 0.5);
+                    if (health <= 0) {
+                        gameRunning = false;
+                        gameOverDiv.innerHTML = `Game Over!<br>Final Score: ${score}<br>Click to Restart`;
+                        gameOverDiv.style.display = 'block';
+                    } else {
+                        playerX = canvas.width / 2;
+                        playerY = canvas.height / 2;
+                    }
+                    break;
+                }
+            }
+        }
+
+        function drawWoodenBackground() {
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            gradient.addColorStop(0, WOOD_LIGHT);
+            gradient.addColorStop(0.5, WOOD_DARK);
+            gradient.addColorStop(1, WOOD_LIGHT);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.filter = 'blur(2px)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.filter = 'none';
+        }
+
+        function drawMouse(x, y, size) {
+            const centerX = x + size / 2;
+            const centerY = y + size / 2;
+            const bodyRadius = size / 3;
+            ctx.shadowColor = GRAY;
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = GRAY;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, bodyRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = BLACK;
+            ctx.beginPath();
+            ctx.arc(centerX - bodyRadius / 2, centerY - bodyRadius, bodyRadius / 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(centerX + bodyRadius / 2, centerY - bodyRadius, bodyRadius / 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = GRAY;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY + bodyRadius);
+            ctx.quadraticCurveTo(centerX + size / 4, centerY + size / 2, centerX + size / 3, centerY + size / 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        function drawCoin(x, y, size) {
+            const centerX = x + size / 2;
+            const centerY = y + size / 2;
+            const radius = size / 2;
+            ctx.shadowColor = BLACK;
+            ctx.shadowBlur = 5;
             ctx.fillStyle = GOLD;
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
@@ -11,6 +306,7 @@
             ctx.fillText('$', centerX, centerY + size / 6);
             ctx.shadowBlur = 0;
         }
+
         function draw() {
             drawWoodenBackground();
             drawMouse(playerX, playerY, playerSize);
@@ -25,6 +321,7 @@
             });
             ctx.shadowBlur = 0;
         }
+
         function gameLoop() {
             update();
             draw();
@@ -32,6 +329,7 @@
                 requestAnimationFrame(gameLoop);
             }
         }
+
         console.log("Starting game loop...");
         gameLoop();
     </script>
