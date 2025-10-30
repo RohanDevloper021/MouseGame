@@ -1,0 +1,39 @@
+            ctx.fillStyle = GOLD;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = '#B8860B';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = BLACK;
+            ctx.font = `${size / 2}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('$', centerX, centerY + size / 6);
+            ctx.shadowBlur = 0;
+        }
+        function draw() {
+            drawWoodenBackground();
+            drawMouse(playerX, playerY, playerSize);
+            coins.forEach(coin => {
+                drawCoin(coin.x, coin.y, coin.size);
+            });
+            ctx.shadowColor = RED;
+            ctx.shadowBlur = 5;
+            ctx.fillStyle = RED;
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, obs.size, obs.size);
+            });
+            ctx.shadowBlur = 0;
+        }
+        function gameLoop() {
+            update();
+            draw();
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        console.log("Starting game loop...");
+        gameLoop();
+    </script>
+</body>
+</html>
